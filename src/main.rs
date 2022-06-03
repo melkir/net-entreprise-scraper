@@ -1,4 +1,10 @@
+use axum::{
+    response::{ErrorResponse, Json},
+    routing::get,
+    Router,
+};
 use scraper::{Html, Selector};
+use serde_json::{json, Value};
 
 const URL: &str = "https://www.net-entreprises.fr/declaration/outils-de-controle-dsn-val/";
 
@@ -41,10 +47,18 @@ fn convert_month_to_number(month: &str) -> &str {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let resp = reqwest::get(URL).await?;
-    let text = resp.text().await?;
+async fn main() {
+    let app = Router::new().route("/", get(json));
 
+    axum::Server::bind(&"0.0.0.0:3000".parse().unwrap())
+        .serve(app.into_make_service())
+        .await
+        .unwrap();
+}
+
+async fn json() -> Result<Json<Value>, ErrorResponse> {
+    let resp = reqwest::get(URL).await.unwrap();
+    let text = resp.text().await.unwrap();
     let document = Html::parse_document(&text);
 
     let link = get_link(&document);
@@ -55,15 +69,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let day = info[3];
     let month = info[4];
     let year = info[5];
-
     let month_number = convert_month_to_number(month);
 
-    println!("version: {}", build);
-
-    let date = format!("{}-{}-{}", year, month_number, day);
-    println!("date: {}", date);
-
-    println!("url: {}", link);
-
-    Ok(())
+    Ok(Json(json!({
+        "version": build,
+        "date": format!("{}-{}-{}", year, month_number, day),
+        "url": link,
+    })))
 }
