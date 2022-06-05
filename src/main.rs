@@ -5,6 +5,7 @@ use axum::{
 };
 use scraper::{Html, Selector};
 use serde_json::{json, Value};
+use std::net::SocketAddr;
 
 const URL: &str = "https://www.net-entreprises.fr/declaration/outils-de-controle-dsn-val/";
 
@@ -50,7 +51,14 @@ fn convert_month_to_number(month: &str) -> &str {
 async fn main() {
     let app = Router::new().route("/", get(json));
 
-    axum::Server::bind(&"0.0.0.0:3000".parse().unwrap())
+    let port = std::env::var("PORT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(3000);
+
+    let address = SocketAddr::from(([0, 0, 0, 0], port));
+
+    axum::Server::bind(&address)
         .serve(app.into_make_service())
         .await
         .unwrap();
