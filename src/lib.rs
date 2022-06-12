@@ -48,14 +48,8 @@ fn convert_month_to_number(month: &str) -> &str {
 }
 
 async fn json() -> Result<Json<Value>, ErrorResponse> {
-    let client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(true)
-        .build()
-        .unwrap();
-
-    let resp = client.get(URL).send().await.unwrap();
-    let text = resp.text().await.unwrap();
-    let document = Html::parse_document(&text);
+    let body: String = ureq::get(URL).call().unwrap().into_string().unwrap();
+    let document = Html::parse_document(&body);
 
     let link = get_link(&document);
     let version = get_version(&document);
