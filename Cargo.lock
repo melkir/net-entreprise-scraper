@@ -350,6 +350,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2fff2a6927b3bb87f9595d67196a70493f627687a71d87a0d692242c33f58c11"
 
 [[package]]
+name = "censor"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5563d2728feef9a6186acdd148bccbe850dad63c5ba55a3b3355abc9137cb3eb"
+dependencies = [
+ "once_cell",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1259,9 +1268,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.12.0"
+version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7709cef83f0c1f58f666e746a08b21e0085f7440fa6a29cc194d68aac97a4225"
+checksum = "074864da206b4973b84eb91683020dbefd6a8c3f0f38e054d93954e891935e4e"
 
 [[package]]
 name = "opaque-debug"
@@ -1968,9 +1977,9 @@ dependencies = [
 
 [[package]]
 name = "shuttle-codegen"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c4ff10b556c64276116ade186f22ef116cefdf90fe3ac07dddc409b1a60cb22"
+checksum = "599770aff3b3de86b3d48d9f6ea12a6a9cd0745997a726c0d78a32d3f174e004"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
@@ -1980,14 +1989,16 @@ dependencies = [
 
 [[package]]
 name = "shuttle-common"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4db6d53608d276029e3ccdcab5bf1cb26eb6b4a486e21573fbb656a978a067e"
+checksum = "c4659b7db2373192a0986d9c2b41eda751fa64ee48d96a4e922d186a5266028b"
 dependencies = [
  "anyhow",
+ "censor",
  "chrono",
  "lazy_static",
  "log",
+ "once_cell",
  "rocket",
  "serde",
  "serde_json",
@@ -1996,9 +2007,9 @@ dependencies = [
 
 [[package]]
 name = "shuttle-service"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ebbe6945f53112f56e2e1cc44d33670d90007aff0755d925e6258d875b464cf"
+checksum = "307209fd428b596cf3342ccac0932c4aff6f4fb137c6b99d4778616667382041"
 dependencies = [
  "anyhow",
  "async-std",
