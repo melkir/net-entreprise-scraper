@@ -4,7 +4,6 @@ use axum::{
     Router,
 };
 use serde_json::Value;
-use sync_wrapper::SyncWrapper;
 
 mod client;
 
@@ -13,10 +12,9 @@ async fn json() -> Result<Json<Value>, ErrorResponse> {
     Ok(Json(info))
 }
 
-#[shuttle_service::main]
-async fn axum() -> shuttle_service::ShuttleAxum {
+#[shuttle_runtime::main]
+async fn axum() -> shuttle_axum::ShuttleAxum {
     let router = Router::new().route("/", get(json));
-    let sync_wrapper = SyncWrapper::new(router);
 
-    Ok(sync_wrapper)
+    Ok(router.into())
 }
