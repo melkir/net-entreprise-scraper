@@ -1,32 +1,7 @@
-use std::sync::Arc;
-
 use scraper::{Html, Selector};
 use serde_json::{json, Value};
 
 const URL: &str = "https://www.net-entreprises.fr/declaration/outils-de-controle-dsn-val/";
-
-// Implementation of `ServerCertVerifier` that verifies everything as trustworthy.
-struct SkipServerVerification;
-
-impl SkipServerVerification {
-    fn new() -> Arc<Self> {
-        Arc::new(Self)
-    }
-}
-
-impl rustls::client::ServerCertVerifier for SkipServerVerification {
-    fn verify_server_cert(
-        &self,
-        _end_entity: &rustls::Certificate,
-        _intermediates: &[rustls::Certificate],
-        _server_name: &rustls::ServerName,
-        _scts: &mut dyn Iterator<Item = &[u8]>,
-        _ocsp_response: &[u8],
-        _now: std::time::SystemTime,
-    ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
-        Ok(rustls::client::ServerCertVerified::assertion())
-    }
-}
 
 fn get_link(document: &Html) -> &str {
     let selector = Selector::parse(r#"strong > a"#).unwrap();
@@ -67,15 +42,7 @@ fn convert_month_to_number(month: &str) -> &str {
 }
 
 pub fn get_info() -> Result<Value, Box<dyn std::error::Error>> {
-    let tls_config = rustls::ClientConfig::builder()
-        .with_safe_default_cipher_suites()
-        .with_safe_default_kx_groups()
-        .with_safe_default_protocol_versions()?
-        .with_custom_certificate_verifier(SkipServerVerification::new())
-        .with_no_client_auth();
-
-    let agent = ureq::builder().tls_config(Arc::new(tls_config)).build();
-    let body: String = agent.get(URL).call()?.into_string()?;
+    let body: String = ureq::get(URL).call()?.body_mut().read_to_string()?;
     let document = Html::parse_document(&body);
     let link = get_link(&document);
     let version = get_version(&document);
