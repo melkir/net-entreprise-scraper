@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: net-entreprise-scraper
+    env: docker
+    buildCommand: docker build -t net-entreprise-scraper .
+    startCommand: docker run -p $PORT:8000 net-entreprise-scraper
+    envVars:
+      - key: PORT
+        value: 8000 
