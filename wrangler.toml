@@ -3,4 +3,4 @@ main = "build/worker/shim.mjs"
 compatibility_date = "2023-05-18"
 
 [build]
-command = "cargo install -q worker-build && worker-build --release"
+command = "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && source ~/.cargo/env && rustup target add wasm32-unknown-unknown && cargo install -q worker-build && worker-build --release"
