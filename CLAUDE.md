@@ -4,31 +4,39 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Rust web scraper service that monitors the net-entreprises.fr website for DSN validation tool updates. It exposes a simple HTTP API that returns information about the latest version, including build number, release date, and download URL.
+This is a Rust web scraper service deployed on Cloudflare Workers that monitors the net-entreprises.fr website for DSN validation tool updates. It exposes a simple HTTP API that returns information about the latest version, including build number, release date, and download URL.
 
 ## Architecture
 
 The application consists of two main modules:
-- `src/main.rs`: Axum web server with a single JSON endpoint at `/`
+- `src/lib.rs`: Cloudflare Worker entry point with fetch event handler and routing
 - `src/client.rs`: Web scraping logic using scraper crate to parse HTML and extract version information
 
-The scraper targets specific selectors (`strong > a` for links, `td > p > strong` for version text) and parses French month names to ISO date format.
+The scraper targets specific selectors (`strong > a` for links, `td > p > strong` for version text) and parses French month names to ISO date format. Uses the workers-rs crate for HTTP requests and error handling.
+
+## Prerequisites
+
+- Recent version of Rust with `wasm32-unknown-unknown` target
+- Node.js and npm (for Wrangler CLI)
+- `worker-build` tool (installed automatically during build)
+
+```bash
+# Add WebAssembly target
+rustup target add wasm32-unknown-unknown
+
+# Install Wrangler CLI globally
+npm install -g wrangler
+```
 
 ## Development Commands
 
-### Build and Run
+### Local Development
 ```bash
-# Development build
-cargo build
+# Install worker-build and run locally
+wrangler dev
 
-# Release build
-cargo build --release
-
-# Run locally
-cargo run
-
-# Run with custom port
-PORT=3000 cargo run
+# Build for production
+wrangler build
 ```
 
 ### Code Quality
@@ -36,25 +44,31 @@ PORT=3000 cargo run
 # Format code
 cargo fmt
 
-# Check code
-cargo check
+# Check code (for WebAssembly target)
+cargo check --target wasm32-unknown-unknown
 
 # Run clippy linter
-cargo clippy
+cargo clippy --target wasm32-unknown-unknown
 ```
 
-### Docker
-```bash
-# Build Docker image
-docker build -t net-entreprise-scraper .
-
-# Run with Docker
-docker run -p 8000:8000 net-entreprise-scraper
-```
+### Build Process
+The build is handled by `worker-build` which:
+- Compiles Rust to WebAssembly
+- Generates JavaScript shim for Worker runtime
+- Optimizes binary size with `wasm-opt`
 
 ## Deployment
 
-The service is configured for Render.com deployment via `render.yaml`. It uses a multi-stage Docker build with the final image running on Arch Linux base.
+### Cloudflare Workers
+```bash
+# Deploy to Cloudflare Workers
+wrangler deploy
+
+# View logs
+wrangler tail
+```
+
+Configuration is managed via `wrangler.toml`. The worker compiles to WebAssembly and runs on Cloudflare's edge network.
 
 ## API
 
@@ -67,4 +81,4 @@ The service is configured for Render.com deployment via `render.yaml`. It uses a
   }
   ```
 
-The server listens on port 8000 by default, configurable via `PORT` environment variable.
+The worker automatically handles HTTPS and runs globally on Cloudflare's edge network.

@@ -1,0 +1,6 @@
+name = "net-entreprise-scraper"
+main = "build/worker/shim.mjs"
+compatibility_date = "2023-05-18"
+
+[build]
+command = "cargo install -q worker-build && worker-build --release"

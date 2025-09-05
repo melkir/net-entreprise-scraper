@@ -2,3 +2,6 @@
 .DS_Store
 .shuttle*
 Secrets*.toml
+.wrangler
+node_modules
+build
