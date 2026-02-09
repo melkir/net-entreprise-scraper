@@ -1,33 +1,37 @@
 use regex::Regex;
-use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde::Serialize;
+use std::sync::LazyLock;
 use worker::*;
 
 const URL: &str = "https://www.net-entreprises.fr/declaration/outils-de-controle-dsn-val/";
 
-#[derive(Debug, Serialize, Deserialize)]
-struct DsnToolInfo {
+static LINK_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"<strong[^>]*>.*?<a[^>]*href="([^"]*\.(?:zip|exe|msi))"[^>]*>.*?</a>.*?</strong>"#)
+        .unwrap()
+});
+
+static VERSION_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"<strong[^>]*>([^<]*Version 20\d{2}[^<]*\d{4}[^<]*)</strong>"#).unwrap()
+});
+
+#[derive(Debug, Serialize)]
+pub struct DsnToolInfo {
     version: String,
     date: String,
     url: String,
 }
 
 fn get_all_links(html: &str) -> Vec<String> {
-    // Find all href attributes within strong tags that contain download links
-    let re = Regex::new(
-        r#"<strong[^>]*>.*?<a[^>]*href="([^"]*\.(?:zip|exe|msi))"[^>]*>.*?</a>.*?</strong>"#,
-    )
-    .unwrap();
-    re.captures_iter(html)
+    LINK_RE
+        .captures_iter(html)
         .filter_map(|cap| cap.get(1).map(|m| m.as_str().trim().to_string()))
         .filter(|url| !url.is_empty())
         .collect()
 }
 
 fn get_all_versions(html: &str) -> Vec<String> {
-    // Find all text content of strong tags that contain "Version 20" followed by date
-    let re = Regex::new(r#"<strong[^>]*>([^<]*Version 20\d{2}[^<]*\d{4}[^<]*)</strong>"#).unwrap();
-    re.captures_iter(html)
+    VERSION_RE
+        .captures_iter(html)
         .filter_map(|cap| cap.get(1).map(|m| m.as_str().trim().to_string()))
         .filter(|text| !text.is_empty())
         .collect()
@@ -88,16 +92,16 @@ fn parse_version_info(version_text: &str, url: &str) -> worker::Result<DsnToolIn
     Ok(DsnToolInfo {
         version: build.to_string(),
         date: format!(
-            "{}-{:02}-{:02}",
+            "{}-{}-{:02}",
             year,
-            month_number.parse::<u32>().unwrap_or(1),
+            month_number,
             day.parse::<u32>().unwrap_or(1)
         ),
         url: url.to_string(),
     })
 }
 
-pub async fn get_info() -> worker::Result<Value> {
+pub async fn get_info() -> worker::Result<Vec<DsnToolInfo>> {
     let mut init = RequestInit::new();
     init.method = Method::Get;
 
@@ -114,11 +118,9 @@ pub async fn get_info() -> worker::Result<Value> {
         ));
     }
 
-    let results: worker::Result<Vec<DsnToolInfo>> = links
+    links
         .iter()
         .zip(versions.iter())
         .map(|(link, version_text)| parse_version_info(version_text, link))
-        .collect();
-
-    Ok(json!(results?))
+        .collect()
 }
