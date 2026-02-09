@@ -5,99 +5,57 @@ use worker::*;
 
 const URL: &str = "https://www.net-entreprises.fr/declaration/outils-de-controle-dsn-val/";
 
-static LINK_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"<strong[^>]*>.*?<a[^>]*href="([^"]*\.(?:zip|exe|msi))"[^>]*>.*?</a>.*?</strong>"#)
-        .unwrap()
-});
+static VERSION_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"Version\s+([\d.]+)\s+du\s+(\d{1,2})\s+(\w+)\s+(\d{4})").unwrap());
 
-static VERSION_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"<strong[^>]*>([^<]*Version 20\d{2}[^<]*\d{4}[^<]*)</strong>"#).unwrap()
-});
+static DOWNLOAD_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"href="([^"]*\.(?:zip|exe|msi))""#).unwrap());
 
 #[derive(Debug, Serialize)]
 pub struct DsnToolInfo {
     version: String,
     date: String,
-    url: String,
+    urls: Vec<String>,
 }
 
-fn get_all_links(html: &str) -> Vec<String> {
-    LINK_RE
-        .captures_iter(html)
-        .filter_map(|cap| cap.get(1).map(|m| m.as_str().trim().to_string()))
-        .filter(|url| !url.is_empty())
-        .collect()
-}
-
-fn get_all_versions(html: &str) -> Vec<String> {
-    VERSION_RE
-        .captures_iter(html)
-        .filter_map(|cap| cap.get(1).map(|m| m.as_str().trim().to_string()))
-        .filter(|text| !text.is_empty())
-        .collect()
-}
-
-fn convert_month_to_number(month: &str) -> Option<&str> {
+fn month_to_number(month: &str) -> Option<&'static str> {
     match month {
         "janvier" => Some("01"),
-        "février" => Some("02"),
+        "février" | "fevrier" => Some("02"),
         "mars" => Some("03"),
         "avril" => Some("04"),
         "mai" => Some("05"),
         "juin" => Some("06"),
         "juillet" => Some("07"),
-        "août" => Some("08"),
+        "août" | "aout" => Some("08"),
         "septembre" => Some("09"),
         "octobre" => Some("10"),
         "novembre" => Some("11"),
-        "décembre" => Some("12"),
+        "décembre" | "decembre" => Some("12"),
         _ => None,
     }
 }
 
-fn parse_version_info(version_text: &str, url: &str) -> worker::Result<DsnToolInfo> {
-    let info: Vec<&str> = version_text.split_whitespace().collect();
-    if info.len() < 6 {
-        return Err(worker::Error::RustError(format!(
-            "Invalid version format - expected at least 6 parts, got {}: '{}'",
-            info.len(),
-            version_text
-        )));
+fn parse_section(section: &str) -> Option<DsnToolInfo> {
+    let version_caps = VERSION_RE.captures(section)?;
+    let build = version_caps.get(1)?.as_str();
+    let day: u32 = version_caps.get(2)?.as_str().parse().ok()?;
+    let month = month_to_number(version_caps.get(3)?.as_str())?;
+    let year = version_caps.get(4)?.as_str();
+
+    let urls: Vec<String> = DOWNLOAD_RE
+        .captures_iter(section)
+        .filter_map(|cap| cap.get(1).map(|m| m.as_str().to_string()))
+        .collect();
+
+    if urls.is_empty() {
+        return None;
     }
 
-    let build = info[1];
-    let day = info[3];
-    let month = info[4];
-    let year = info[5];
-
-    // Validate day is numeric and reasonable
-    if day.parse::<u32>().map_or(true, |d| !(1..=31).contains(&d)) {
-        return Err(worker::Error::RustError(format!(
-            "Invalid day value: '{}'",
-            day
-        )));
-    }
-
-    // Validate year is 4 digits
-    if year.len() != 4 || year.parse::<u32>().is_err() {
-        return Err(worker::Error::RustError(format!(
-            "Invalid year value: '{}'",
-            year
-        )));
-    }
-
-    let month_number = convert_month_to_number(month)
-        .ok_or_else(|| worker::Error::RustError(format!("Unrecognized month: '{}'", month)))?;
-
-    Ok(DsnToolInfo {
+    Some(DsnToolInfo {
         version: build.to_string(),
-        date: format!(
-            "{}-{}-{:02}",
-            year,
-            month_number,
-            day.parse::<u32>().unwrap_or(1)
-        ),
-        url: url.to_string(),
+        date: format!("{}-{}-{:02}", year, month, day),
+        urls,
     })
 }
 
@@ -109,18 +67,14 @@ pub async fn get_info() -> worker::Result<Vec<DsnToolInfo>> {
     let mut response = Fetch::Request(request).send().await?;
     let body = response.text().await?;
 
-    let links = get_all_links(&body);
-    let versions = get_all_versions(&body);
+    let sections: Vec<&str> = body.split("<h2").collect();
+    let results: Vec<DsnToolInfo> = sections.into_iter().filter_map(parse_section).collect();
 
-    if links.len() != versions.len() {
+    if results.is_empty() {
         return Err(worker::Error::RustError(
-            "Mismatch between number of links and versions found".to_string(),
+            "No version information found on the page".to_string(),
         ));
     }
 
-    links
-        .iter()
-        .zip(versions.iter())
-        .map(|(link, version_text)| parse_version_info(version_text, link))
-        .collect()
+    Ok(results)
 }
