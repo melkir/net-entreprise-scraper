@@ -5,11 +5,11 @@ mod client;
 const CACHE_TTL: u64 = 300; // 5 minutes
 
 #[event(fetch)]
-pub async fn main(req: Request, env: Env, ctx: worker::Context) -> Result<Response> {
+pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Response> {
     console_error_panic_hook::set_once();
 
     Router::new()
-        .get_async("/", |req, ctx| async move {
+        .get_async("/", |req, _ctx| async move {
             let cache = Cache::default();
             let cache_request = Request::new_with_init(
                 req.url()?.as_str(),
