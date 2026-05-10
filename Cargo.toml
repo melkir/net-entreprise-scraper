@@ -7,7 +7,7 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-worker = "0.7.5"
+worker = "0.8.0"
 serde = { version = "1.0", features = ["derive"] }
 console_error_panic_hook = "0.1.7"
 regex = "1.12.3"
