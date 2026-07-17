@@ -10,9 +10,9 @@ This is a Rust web scraper service deployed on Cloudflare Workers that monitors 
 
 The application consists of two main modules:
 - `src/lib.rs`: Cloudflare Worker entry point with fetch event handler and routing
-- `src/client.rs`: Web scraping logic using scraper crate to parse HTML and extract version information
+- `src/client.rs`: Web scraping logic that parses version sections, validates release dates, and normalizes download URLs
 
-The scraper targets specific selectors (`strong > a` for links, `td > p > strong` for version text) and parses French month names to ISO date format. Uses the workers-rs crate for HTTP requests and error handling.
+The scraper splits the page into `<h2>` sections, extracts version text and downloadable `.zip`, `.exe`, or `.msi` links, and parses French month names to ISO date format. It uses the workers-rs crate for HTTP requests and error handling.
 
 ## Prerequisites
 
@@ -35,8 +35,8 @@ npm install -g wrangler
 # Install worker-build and run locally
 wrangler dev
 
-# Build for production
-wrangler build
+# Validate the production build without deploying
+wrangler deploy --dry-run
 ```
 
 ### Code Quality
@@ -74,11 +74,13 @@ Configuration is managed via `wrangler.toml`. The worker compiles to WebAssembly
 
 - `GET /`: Returns JSON with current DSN tool version info
   ```json
-  {
-    "version": "build_number",
-    "date": "YYYY-MM-DD",
-    "url": "download_link"
-  }
+  [
+    {
+      "version": "build_number",
+      "date": "YYYY-MM-DD",
+      "urls": ["download_link"]
+    }
+  ]
   ```
 
 The worker automatically handles HTTPS and runs globally on Cloudflare's edge network.
