@@ -1,6 +1,6 @@
 name = "net-entreprise-scraper"
 main = "build/worker/shim.mjs"
-compatibility_date = "2023-05-18"
+compatibility_date = "2026-07-17"
 preview_urls = false
 
 [build]
