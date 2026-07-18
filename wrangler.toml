@@ -1,4 +1,5 @@
 name = "net-entreprise-scraper"
+account_id = "c26e7cbc79e0d77767f00f5b29baa355"
 main = "build/worker/shim.mjs"
 compatibility_date = "2026-07-17"
 preview_urls = false
