@@ -4,4 +4,4 @@ compatibility_date = "2026-07-17"
 preview_urls = false
 
 [build]
-command = "cargo install -q worker-build@0.8.5 && worker-build --release"
+command = "cargo install -q --locked worker-build@0.8.5 && worker-build --release"

@@ -222,6 +222,61 @@ mod tests {
     }
 
     #[test]
+    fn parse_page_keeps_downloads_within_their_version_section() {
+        let page = r#"
+            <h2>Incomplete version</h2>
+            <p>Version 2026.1 du 4 mars 2026</p>
+            <h2>Unrelated download</h2>
+            <a href="https://cdn.example.com/unrelated.zip">Download</a>
+            <h2>Complete version</h2>
+            <p>Version 2026.2 du 5 mars 2026</p>
+            <a href="https://cdn.example.com/dsn-val-2026.2.zip">Download</a>
+        "#;
+
+        let info = parse_page(page);
+
+        assert_eq!(info.len(), 1);
+        assert_eq!(info[0].version, "2026.2");
+        assert_eq!(
+            info[0].urls,
+            vec!["https://cdn.example.com/dsn-val-2026.2.zip"]
+        );
+    }
+
+    #[test]
+    fn parse_section_handles_leap_year_boundaries() {
+        let leap_day = r#"
+            Version 2024.2 du 29 février 2024
+            <a href="https://cdn.example.com/dsn-val.zip">Download</a>
+        "#;
+        let non_leap_day = r#"
+            Version 2100.2 du 29 février 2100
+            <a href="https://cdn.example.com/dsn-val.zip">Download</a>
+        "#;
+
+        assert_eq!(parse_section(leap_day).unwrap().date, "2024-02-29");
+        assert_eq!(parse_section(non_leap_day), None);
+    }
+
+    #[test]
+    fn dsn_tool_info_serializes_to_the_api_contract() {
+        let info = DsnToolInfo {
+            version: "2026.2".to_string(),
+            date: "2026-03-05".to_string(),
+            urls: vec!["https://cdn.example.com/dsn-val.zip".to_string()],
+        };
+
+        assert_eq!(
+            serde_json::to_value(info).unwrap(),
+            serde_json::json!({
+                "version": "2026.2",
+                "date": "2026-03-05",
+                "urls": ["https://cdn.example.com/dsn-val.zip"]
+            })
+        );
+    }
+
+    #[test]
     fn parse_section_rejects_invalid_dates_and_non_http_downloads() {
         let invalid_date = r#"
             Version 2025.1 du 31 février 2025
