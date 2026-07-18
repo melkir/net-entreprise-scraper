@@ -64,8 +64,12 @@ mod tests {
 
     #[test]
     fn cache_url_ignores_unused_query_and_fragment() {
-        let url = Url::parse("https://api.example.com/?cache-bust=1#result").unwrap();
+        let url =
+            Url::parse("https://api.example.com/releases/latest?cache-bust=1#result").unwrap();
 
-        assert_eq!(canonical_cache_url(url), "https://api.example.com/");
+        assert_eq!(
+            canonical_cache_url(url),
+            "https://api.example.com/releases/latest"
+        );
     }
 }

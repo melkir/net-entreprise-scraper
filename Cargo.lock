@@ -318,6 +318,7 @@ dependencies = [
  "console_error_panic_hook",
  "regex",
  "serde",
+ "serde_json",
  "worker",
 ]
 
