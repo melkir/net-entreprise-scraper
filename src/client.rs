@@ -1,16 +1,16 @@
 use regex::Regex;
 use serde::Serialize;
-use std::collections::HashSet;
+use std::borrow::Cow;
 use std::sync::LazyLock;
-use worker::*;
+use worker::{Error, Fetch, Result, Url};
 
-const URL: &str = "https://www.net-entreprises.fr/declaration/outils-de-controle-dsn-val/";
+static PAGE_URL: LazyLock<Url> = LazyLock::new(|| {
+    Url::parse("https://www.net-entreprises.fr/declaration/outils-de-controle-dsn-val/").unwrap()
+});
 
 static VERSION_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-        r"(?i)Version\s+(\d+(?:\.\d+)*)\s+du\s+(\d{1,2})(?:\s+(?:er|e))?\s+([\p{L}]+)\s+(\d{4})",
-    )
-    .unwrap()
+    Regex::new(r"(?i)Version\s+(\d+(?:\.\d+)*)\s+du\s+(\d{1,2})(?:\s*er?)?\s+(\p{L}+)\s+(\d{4})")
+        .unwrap()
 });
 
 static HTML_TAG_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)<[^>]+>").unwrap());
@@ -27,8 +27,34 @@ pub struct DsnToolInfo {
     urls: Vec<String>,
 }
 
+const DOWNLOAD_EXTENSIONS: [&str; 3] = ["zip", "exe", "msi"];
+
+// `&amp;` is decoded last so that escaped entities such as `&amp;nbsp;` are not decoded twice.
+const HTML_ENTITIES: [(&str, &str); 7] = [
+    ("&nbsp;", " "),
+    ("&#160;", " "),
+    ("&#038;", "&"),
+    ("&#38;", "&"),
+    ("&#x26;", "&"),
+    ("&#X26;", "&"),
+    ("&amp;", "&"),
+];
+
+fn decode_entities(text: &str) -> Cow<'_, str> {
+    if !text.contains('&') {
+        return Cow::Borrowed(text);
+    }
+
+    let mut decoded = text.to_string();
+    for (entity, replacement) in HTML_ENTITIES {
+        decoded = decoded.replace(entity, replacement);
+    }
+
+    Cow::Owned(decoded)
+}
+
 fn month_to_number(month: &str) -> Option<u32> {
-    match month.trim().to_lowercase().as_str() {
+    match month.to_lowercase().as_str() {
         "janvier" => Some(1),
         "février" | "fevrier" => Some(2),
         "mars" => Some(3),
@@ -60,44 +86,31 @@ fn is_valid_date(year: u32, month: u32, day: u32) -> bool {
 }
 
 fn normalize_download_url(raw_url: &str) -> Option<Url> {
-    let decoded_url = raw_url
-        .trim()
-        .replace("&amp;", "&")
-        .replace("&#038;", "&")
-        .replace("&#38;", "&")
-        .replace("&#x26;", "&")
-        .replace("&#X26;", "&");
-    let url = Url::parse(URL).ok()?.join(&decoded_url).ok()?;
+    let url = PAGE_URL.join(&decode_entities(raw_url.trim())).ok()?;
 
     matches!(url.scheme(), "http" | "https").then_some(url)
 }
 
 fn is_download_url(url: &Url) -> bool {
-    url.path()
-        .rsplit_once('.')
-        .map(|(_, extension)| extension.to_ascii_lowercase())
-        .is_some_and(|extension| matches!(extension.as_str(), "zip" | "exe" | "msi"))
+    url.path().rsplit_once('.').is_some_and(|(_, extension)| {
+        DOWNLOAD_EXTENSIONS
+            .iter()
+            .any(|download_extension| extension.eq_ignore_ascii_case(download_extension))
+    })
 }
 
 fn extract_download_urls(section: &str) -> Vec<String> {
-    let mut urls = Vec::new();
-    let mut seen = HashSet::new();
+    let mut urls: Vec<String> = Vec::new();
 
-    for capture in HREF_RE.captures_iter(section) {
-        let Some(raw_url) = capture.get(1).map(|m| m.as_str()) else {
-            continue;
-        };
+    let candidates = HREF_RE
+        .captures_iter(section)
+        .filter_map(|capture| normalize_download_url(&capture[1]))
+        .filter(is_download_url)
+        .map(String::from);
 
-        let Some(url) = normalize_download_url(raw_url) else {
-            continue;
-        };
-
-        if !is_download_url(&url) {
-            continue;
-        }
-
-        let url = url.to_string();
-        if seen.insert(url.clone()) {
+    // Sections only hold a handful of links, so a linear scan beats hashing.
+    for url in candidates {
+        if !urls.contains(&url) {
             urls.push(url);
         }
     }
@@ -106,12 +119,12 @@ fn extract_download_urls(section: &str) -> Vec<String> {
 }
 
 fn parse_section(section: &str) -> Option<DsnToolInfo> {
-    let text = HTML_TAG_RE.replace_all(section, " ");
-    let version_caps = VERSION_RE.captures(&text)?;
-    let build = version_caps.get(1)?.as_str();
-    let day: u32 = version_caps.get(2)?.as_str().parse().ok()?;
-    let month = month_to_number(version_caps.get(3)?.as_str())?;
-    let year: u32 = version_caps.get(4)?.as_str().parse().ok()?;
+    let without_tags = HTML_TAG_RE.replace_all(section, " ");
+    let text = decode_entities(&without_tags);
+    let caps = VERSION_RE.captures(&text)?;
+    let day: u32 = caps[2].parse().ok()?;
+    let month = month_to_number(&caps[3])?;
+    let year: u32 = caps[4].parse().ok()?;
 
     if !is_valid_date(year, month, day) {
         return None;
@@ -123,7 +136,7 @@ fn parse_section(section: &str) -> Option<DsnToolInfo> {
     }
 
     Some(DsnToolInfo {
-        version: build.to_string(),
+        version: caps[1].to_string(),
         date: format!("{year:04}-{month:02}-{day:02}"),
         urls,
     })
@@ -133,25 +146,20 @@ fn parse_page(body: &str) -> Vec<DsnToolInfo> {
     SECTION_RE.split(body).filter_map(parse_section).collect()
 }
 
-pub async fn get_info() -> worker::Result<Vec<DsnToolInfo>> {
-    let mut init = RequestInit::new();
-    init.method = Method::Get;
+pub async fn get_info() -> Result<Vec<DsnToolInfo>> {
+    let mut response = Fetch::Url(PAGE_URL.clone()).send().await?;
 
-    let request = Request::new_with_init(URL, &init)?;
-    let mut response = Fetch::Request(request).send().await?;
-
-    if !(200..=299).contains(&response.status_code()) {
+    let status = response.status_code();
+    if !(200..=299).contains(&status) {
         return Err(Error::RustError(format!(
-            "Upstream request failed with status {}",
-            response.status_code()
+            "Upstream request failed with status {status}"
         )));
     }
 
-    let body = response.text().await?;
-    let results = parse_page(&body);
+    let results = parse_page(&response.text().await?);
 
     if results.is_empty() {
-        return Err(worker::Error::RustError(
+        return Err(Error::RustError(
             "No version information found on the page".to_string(),
         ));
     }
@@ -241,6 +249,21 @@ mod tests {
             info[0].urls,
             vec!["https://cdn.example.com/dsn-val-2026.2.zip"]
         );
+    }
+
+    #[test]
+    fn parse_section_handles_unspaced_ordinal_and_nbsp_dates() {
+        let unspaced_ordinal = r#"
+            <h2>Version 2027.1.0.2 du 1er juillet 2026</h2>
+            <a href="https://cdn.example.com/dsn-val.zip">Download</a>
+        "#;
+        let nbsp = r#"
+            <h2>Version 2026.2 du 5&nbsp;mars&nbsp;2026</h2>
+            <a href="https://cdn.example.com/dsn-val.zip">Download</a>
+        "#;
+
+        assert_eq!(parse_section(unspaced_ordinal).unwrap().date, "2026-07-01");
+        assert_eq!(parse_section(nbsp).unwrap().date, "2026-03-05");
     }
 
     #[test]
